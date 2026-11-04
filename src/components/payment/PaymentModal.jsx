@@ -7,10 +7,18 @@ import { ReferencePaymentFields } from './ReferencePaymentFields';
 import { CreditPaymentFields } from './CreditPaymentFields';
 import { SplitPaymentEditor } from './SplitPaymentEditor';
 import { PaymentSuccessPanel } from './PaymentSuccessPanel';
+import { UpiQrModal } from './UpiQrModal';
 import { checkoutBill } from '@/api/bills';
 import { printReceipt } from '@/utils/printReceipt';
 import { formatCurrency } from '@/utils/currency';
 import { makeIdempotencyKey } from '@/utils/id';
+import {
+  UPI_ERROR_CODES,
+  isDefinitiveRejection,
+  normalizeUpiReference,
+  toPaise,
+  validateUpiReference,
+} from '@/utils/upi';
 import { cn } from '@/utils/cn';
 
 const METHODS = [
@@ -42,6 +50,8 @@ export function PaymentModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [bill, setBill] = useState(null);
+  // null | { type: 'single' } | { type: 'split', lineId } — which UPI QR popup is showing
+  const [qrTarget, setQrTarget] = useState(null);
   const idempotencyKeyRef = useRef(makeIdempotencyKey());
   const submittingRef = useRef(false); // belt-and-suspenders double-click guard
 
@@ -56,6 +66,8 @@ export function PaymentModal({
       setSplitLines([]);
       setError(null);
       setBill(null);
+      // UPI preselected from the Cart -> open the QR popup as the sheet opens.
+      setQrTarget(initialMethod === 'upi' ? { type: 'single' } : null);
       idempotencyKeyRef.current = makeIdempotencyKey();
       submittingRef.current = false;
     }
@@ -65,14 +77,16 @@ export function PaymentModal({
   const grandTotal = totals.grandTotal;
   const creditAllowed = !!customer;
 
-  function buildPayments() {
+  function buildPayments(refOverride) {
     if (!splitEnabled) {
       const payment = { method, amount: grandTotal };
       if (method === 'cash') {
         const receivedNum = Number(cashReceived) || 0;
         payment.cashReceived = receivedNum;
         payment.change = Math.max(receivedNum - grandTotal, 0);
-      } else if (method === 'card' || method === 'upi') {
+      } else if (method === 'upi') {
+        payment.reference = normalizeUpiReference(refOverride ?? reference);
+      } else if (method === 'card') {
         if (reference.trim()) payment.reference = reference.trim();
       }
       return [payment];
@@ -80,14 +94,24 @@ export function PaymentModal({
     return splitLines.map((l) => ({
       method: l.method,
       amount: Number(l.amount) || 0,
-      ...(l.reference?.trim() ? { reference: l.reference.trim() } : {}),
+      ...(l.method === 'upi'
+        ? { reference: normalizeUpiReference(l.reference) }
+        : l.reference?.trim()
+          ? { reference: l.reference.trim() }
+          : {}),
     }));
   }
 
-  function validate() {
+  function validate(refOverride) {
     if (!splitEnabled) {
       if (method === 'credit' && !creditAllowed) return 'Select a customer before completing credit billing.';
       if (method === 'cash' && Number(cashReceived) < grandTotal) return 'Cash received is less than the bill total.';
+      if (method === 'upi') {
+        if (toPaise(grandTotal) === null) return 'UPI payment needs a valid amount.';
+        if (validateUpiReference(refOverride ?? reference)) {
+          return 'Show the UPI QR and confirm the transaction reference to complete payment.';
+        }
+      }
       return null;
     }
     if (splitLines.length === 0) return 'Add at least one payment.';
@@ -97,16 +121,29 @@ export function PaymentModal({
     if (splitLines.some((l) => l.method === 'credit') && !creditAllowed) {
       return 'Select a customer before including credit in a split payment.';
     }
+    // UPI lines: the reference is mandatory and must be unique within the bill.
+    // (The backend remains the authority, incl. uniqueness across branches.)
+    const upiLines = splitLines.filter((l) => l.method === 'upi');
+    if (upiLines.some((l) => validateUpiReference(l.reference))) {
+      return 'Show the QR and confirm the reference for each UPI payment.';
+    }
+    const refs = upiLines.map((l) => normalizeUpiReference(l.reference));
+    if (new Set(refs).size !== refs.length) return 'Each UPI payment needs a different reference.';
     return null;
   }
 
   const validationError = validate();
 
-  async function handleSubmit() {
-    if (submittingRef.current || validationError) return;
+  // `opts.reference` lets the QR popup submit with the reference it just
+  // collected (state updates aren't visible within the same tick).
+  async function handleSubmit(opts) {
+    const refOverride = opts?.reference;
+    const blocked = refOverride !== undefined ? validate(refOverride) : validationError;
+    if (submittingRef.current || blocked) return;
     submittingRef.current = true;
     setSubmitting(true);
     setError(null);
+    const payments = buildPayments(refOverride);
     try {
       const result = await checkoutBill({
         shopId: cashier?.shop?.id,
@@ -120,24 +157,89 @@ export function PaymentModal({
         discount: totals.discount,
         tax: totals.tax,
         grandTotal,
-        payments: buildPayments(),
+        payments,
         idempotencyKey: idempotencyKeyRef.current,
       });
       setBill(result);
       setStage('success');
+      setQrTarget(null);
       onSuccess?.(result);
     } catch (err) {
       setError(err);
+      if (payments.some((p) => p.method === 'upi')) {
+        // A definitive rejection created nothing, so a fresh key is safe (and
+        // avoids a backend replaying a cached failure). Network errors / 5xx
+        // keep the same key: the outcome is unknown and a retry must stay idempotent.
+        if (isDefinitiveRejection(err)) idempotencyKeyRef.current = makeIdempotencyKey();
+        if (err?.code === UPI_ERROR_CODES.DUPLICATE_REFERENCE) clearRejectedReference(err);
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
+  // The backend refused a reference as a duplicate -> it can't be reused.
+  function clearRejectedReference(err) {
+    if (!splitEnabled) {
+      setReference('');
+      return;
+    }
+    const rejected = normalizeUpiReference(err?.raw?.data?.reference);
+    setSplitLines((lines) =>
+      lines.map((l) =>
+        l.method === 'upi' && (!rejected || normalizeUpiReference(l.reference) === rejected)
+          ? { ...l, reference: '' }
+          : l
+      )
+    );
+  }
+
+  function selectMethod(id) {
+    // Never carry a card reference into UPI (or a UPI one out of it).
+    if (id !== method && (id === 'upi' || method === 'upi')) setReference('');
+    setMethod(id);
+    if (id === 'upi') {
+      setError(null);
+      setQrTarget({ type: 'single' });
+    }
+  }
+
+  function handleShowUpiQr(line) {
+    setError(null);
+    setQrTarget({ type: 'split', lineId: line.id });
+  }
+
+  async function handleUpiConfirm(ref) {
+    if (qrTarget?.type === 'split') {
+      // Split: attach the reference to that UPI line only. The bill is
+      // completed (and the reference validated by the backend) when the
+      // cashier presses Complete Payment.
+      const lineId = qrTarget.lineId;
+      setSplitLines((lines) => lines.map((l) => (l.id === lineId ? { ...l, reference: ref } : l)));
+      setQrTarget(null);
+      return;
+    }
+    setReference(ref);
+    await handleSubmit({ reference: ref });
+  }
+
+  const qrLine = qrTarget?.type === 'split' ? splitLines.find((l) => l.id === qrTarget.lineId) : null;
+  const showQrPopup = stage === 'form' && !!qrTarget && (qrTarget.type === 'single' || !!qrLine);
+  const takenReferences =
+    qrTarget?.type === 'split'
+      ? splitLines
+          .filter((l) => l.id !== qrTarget.lineId && l.method === 'upi')
+          .map((l) => normalizeUpiReference(l.reference))
+          .filter(Boolean)
+      : [];
+
   return (
+    <>
     <Modal
       open={open}
-      onClose={stage === 'success' ? onClose : submitting ? undefined : onClose}
+      // While the QR popup is on top, only the popup handles Escape/close.
+      onClose={qrTarget ? undefined : stage === 'success' ? onClose : submitting ? undefined : onClose}
       title={stage === 'success' ? 'Payment' : 'Complete Payment'}
       className="max-w-md"
     >
@@ -174,7 +276,7 @@ export function PaymentModal({
                 {METHODS.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
-                    onClick={() => setMethod(id)}
+                    onClick={() => selectMethod(id)}
                     className={cn(
                       'flex flex-col items-center gap-1.5 rounded-[10px] border py-3 text-xs font-medium transition-colors',
                       method === id
@@ -198,6 +300,7 @@ export function PaymentModal({
                     grandTotal={grandTotal}
                     reference={reference}
                     onReferenceChange={setReference}
+                    onShowQr={() => selectMethod('upi')}
                   />
                 )}
                 {method === 'credit' && (
@@ -214,11 +317,12 @@ export function PaymentModal({
                 onChange={setSplitLines}
                 grandTotal={grandTotal}
                 creditAllowed={creditAllowed}
+                onShowUpiQr={handleShowUpiQr}
               />
             </div>
           )}
 
-          {error && (
+          {error && !showQrPopup && (
             <div className="mt-3.5 flex items-start gap-2 rounded-[10px] bg-danger-500/10 px-3 py-2.5 text-sm text-danger-600">
               <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
               <span>{error.message}</span>
@@ -230,7 +334,7 @@ export function PaymentModal({
             className="mt-4 w-full"
             disabled={!!validationError}
             loading={submitting}
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
           >
             Complete Payment
           </Button>
@@ -240,5 +344,20 @@ export function PaymentModal({
         </div>
       )}
     </Modal>
+
+    {open && showQrPopup && (
+      <UpiQrModal
+        amount={qrTarget.type === 'split' ? qrLine.amount : grandTotal}
+        mode={qrTarget.type}
+        initialReference={qrTarget.type === 'split' ? qrLine.reference : reference}
+        takenReferences={takenReferences}
+        submitting={submitting}
+        error={error}
+        onConfirm={handleUpiConfirm}
+        onClose={() => setQrTarget(null)}
+        onReferenceEdit={() => setError(null)}
+      />
+    )}
+    </>
   );
 }

@@ -57,9 +57,14 @@
  * @typedef {Object} Payment
  * @property {string} method           // 'cash' | 'card' | 'upi' | 'credit'
  * @property {number} amount
- * @property {string} [reference]      // card/UPI reference id, if supported
+ * @property {string} [reference]      // card: optional. UPI: REQUIRED, 6-35 chars A-Za-z0-9, sent normalized (trimmed, uppercase); backend enforces + de-duplicates
  * @property {number} [cashReceived]   // cash method only
  * @property {number} [change]         // cash method only
+ *
+ * @typedef {Object} UpiQrPayload      // internal shape the UI uses (see api/upi.js adapter; CONTRACT PENDING)
+ * @property {string} payeeName        // receiving shop/business name shown to the cashier
+ * @property {string} upiId            // receiving UPI ID shown to the cashier
+ * @property {string} upiUri           // upi://pay?pa=&pn=&am=&cu=INR... — encoded into the QR; amount/currency/payee are re-verified client-side before rendering
  *
  * @typedef {Object} Bill
  * @property {string} id

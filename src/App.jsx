@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from '@/pages/cashier/LoginPage';
+import { ForgotPasswordPage } from '@/pages/cashier/ForgotPasswordPage';
 import { InvitationCodePage } from '@/pages/cashier/InvitationCodePage';
 import { SignupPage } from '@/pages/cashier/SignupPage';
 import { VerifyOtpPage } from '@/pages/cashier/VerifyOtpPage';
@@ -21,6 +22,9 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/cashier/billing" replace />} />
       <Route path="/cashier/login" element={<LoginPage />} />
+      <Route path="/cashier/forgot-password" element={<ForgotPasswordPage />} />
+      {/* The old emailed-link reset no longer exists; send stale links to the new flow. */}
+      <Route path="/cashier/reset-password" element={<Navigate to="/cashier/forgot-password" replace />} />
       {/* Cashier Sign Up -> Invite Code -> Account Details -> Complete Registration */}
       <Route path="/cashier/signup" element={<InvitationCodePage />} />
       <Route path="/cashier/signup/account" element={<SignupPage />} />

@@ -104,7 +104,7 @@ export function HistoryPage() {
           <EmptyState
             icon={History}
             title="No bills found"
-            description="Completed sales matching your filters will appear here."
+            description="Sales matching your filters will appear here. Cancelled bills stay visible and are labelled."
           />
         )}
 
@@ -124,11 +124,15 @@ export function HistoryPage() {
               </thead>
               <tbody className="divide-y divide-charcoal-900/6">
                 {bills.map((bill) => (
-                  <tr key={bill.id}>
+                  <tr key={bill.id} className={bill.status === 'cancelled' ? 'bg-danger-500/5' : undefined}>
                     <td className="px-4 py-3 font-medium text-charcoal-900">{bill.billNumber}</td>
                     <td className="px-4 py-3 text-charcoal-500">{formatDateTime(bill.createdAt)}</td>
                     <td className="px-4 py-3 text-charcoal-700">{bill.customer?.name || 'Walk-in'}</td>
-                    <td className="px-4 py-3 text-right font-medium text-charcoal-900">
+                    <td
+                      className={`px-4 py-3 text-right font-medium ${
+                        bill.status === 'cancelled' ? 'text-charcoal-300 line-through' : 'text-charcoal-900'
+                      }`}
+                    >
                       {formatCurrency(bill.grandTotal)}
                     </td>
                     <td className="px-4 py-3 text-charcoal-500">
@@ -137,7 +141,11 @@ export function HistoryPage() {
                         : METHOD_LABEL[bill.payments[0]?.method] || bill.payments[0]?.method}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone="success">Paid</Badge>
+                      {bill.status === 'cancelled' ? (
+                        <Badge tone="danger">Cancelled</Badge>
+                      ) : (
+                        <Badge tone="success">Paid</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1.5">
@@ -148,6 +156,7 @@ export function HistoryPage() {
                         >
                           <Eye className="size-4" />
                         </button>
+                        {bill.status !== 'cancelled' && (
                         <button
                           onClick={() => printReceipt(bill)}
                           aria-label={`Reprint bill ${bill.billNumber}`}
@@ -155,6 +164,7 @@ export function HistoryPage() {
                         >
                           <Printer className="size-4" />
                         </button>
+                        )}
                       </div>
                     </td>
                   </tr>

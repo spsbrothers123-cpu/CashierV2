@@ -1,7 +1,38 @@
+import { QrCode } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/utils/currency';
+import { toPaise, validateUpiReference } from '@/utils/upi';
 
-export function ReferencePaymentFields({ method, grandTotal, reference, onReferenceChange }) {
+export function ReferencePaymentFields({
+  method,
+  grandTotal,
+  reference,
+  onReferenceChange,
+  onShowQr, // UPI only: reopens the QR popup
+}) {
   const label = method === 'card' ? 'Card' : 'UPI';
+
+  if (method === 'upi') {
+    const amountValid = toPaise(grandTotal) !== null;
+    const hasReference = !validateUpiReference(reference);
+    return (
+      <div className="rounded-[10px] border border-charcoal-900/10 p-3.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-charcoal-500">Amount</span>
+          <span className="font-semibold text-charcoal-900">{formatCurrency(grandTotal)}</span>
+        </div>
+        <p className="mt-3 text-xs text-charcoal-500">
+          Show the QR, let the customer pay, then enter the UPI transaction reference to confirm.
+        </p>
+        {hasReference && (
+          <p className="mt-2 text-xs font-medium text-charcoal-800">Reference entered: {reference.trim().toUpperCase()}</p>
+        )}
+        <Button variant="outline" className="mt-3 w-full" disabled={!amountValid} onClick={onShowQr}>
+          <QrCode className="size-4" aria-hidden /> Show QR
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-[10px] border border-charcoal-900/10 p-3.5">

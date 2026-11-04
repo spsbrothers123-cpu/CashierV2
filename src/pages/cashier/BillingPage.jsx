@@ -91,13 +91,18 @@ export function BillingPage() {
   }, [loadProducts]);
 
   function handleSelectProduct(product) {
+    // Zero-stock products stay visible in the catalogue but can never enter the cart.
     if (product.stock <= 0) return;
     setEditingProduct(product);
   }
 
-  function handleConfirmEdit({ quantity, unitPrice }) {
+  function handleConfirmEdit({ quantity }) {
     const wasAlreadyInCart = items.some((i) => i.product.id === editingProduct.id);
-    upsertCartItem(editingProduct, { quantity, unitPrice });
+    const applied = upsertCartItem(editingProduct, { quantity });
+    if (!applied) {
+      push(`Only ${editingProduct.stock} ${editingProduct.unit || 'unit'}(s) of ${editingProduct.name} available.`, 'error');
+      return;
+    }
     push(wasAlreadyInCart ? `Updated ${editingProduct.name}` : `Added ${editingProduct.name}`, 'success');
     setEditingProduct(null);
   }
@@ -114,9 +119,17 @@ export function BillingPage() {
       if (results.length === 0) {
         setScanNotFound(true);
       } else {
-        addProduct(results[0]);
-        push(`Added ${results[0].name}`, 'success');
-        setScannerOpen(false);
+        if (addProduct(results[0])) {
+          push(`Added ${results[0].name}`, 'success');
+          setScannerOpen(false);
+        } else {
+          push(
+            results[0].stock <= 0
+              ? `${results[0].name} is out of stock.`
+              : `No more ${results[0].name} available.`,
+            'error'
+          );
+        }
       }
     } catch (err) {
       push(err.message || 'Could not look up barcode.', 'error');
@@ -150,15 +163,33 @@ export function BillingPage() {
     }
   }
 
-  function handleResumeHeldBill(bill) {
-    // Restore items/customer from the held bill into the active cart,
-    // preserving any bill-level price override each line had.
+  async function handleResumeHeldBill(bill) {
+    // A held bill only stores product ids + quantities. Re-fetch the live,
+    // branch-scoped catalogue so each line gets the CURRENT effective price
+    // and available stock (the held snapshot can be stale or unassigned).
+    let live;
+    try {
+      live = await searchProducts({});
+    } catch (err) {
+      push(err.message || 'Could not refresh products to resume this bill.', 'error');
+      return;
+    }
+    const byId = new Map(live.map((p) => [p.id, p]));
     clearCart();
+    const skipped = [];
     bill.items.forEach((i) => {
-      upsertCartItem(i.product, { quantity: i.quantity, unitPrice: i.unitPrice ?? i.product.price });
+      const fresh = byId.get(i.product.id);
+      if (!fresh || fresh.stock <= 0) {
+        skipped.push(i.product.name);
+        return;
+      }
+      const qty = Math.min(i.quantity, fresh.stock);
+      upsertCartItem(fresh, { quantity: qty });
+      if (qty < i.quantity) skipped.push(`${i.product.name} (reduced to ${qty})`);
     });
     if (bill.customer) setCustomer(bill.customer);
     setHeldOpen(false);
+    if (skipped.length > 0) push(`Some items changed: ${skipped.join(', ')}.`, 'error');
     deleteHeldBill(bill.id).then(() =>
       setHeldBills((prev) => prev.filter((b) => b.id !== bill.id))
     );
@@ -183,6 +214,8 @@ export function BillingPage() {
     clearCart();
     if (cashier?.id) refreshSessionSummary(cashier.id);
     push('Payment recorded.', 'success');
+    // Stock changed — refresh the branch catalogue so counts are current.
+    loadProducts();
   }
 
   function handleClosePayment() {

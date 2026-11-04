@@ -2,44 +2,55 @@ import { create } from 'zustand';
 import { holdBill as apiHoldBill } from '@/api/bills';
 
 export const useCartStore = create((set, get) => ({
-  items: [], // { product, quantity, unitPrice } — unitPrice is a bill-only override, never written back to product.price
+  // { product, quantity, unitPrice } — unitPrice is ALWAYS product.price (the
+  // backend-resolved effective branch price). Cashiers cannot override it;
+  // the backend re-resolves the price at checkout regardless.
+  items: [],
   customer: null,
 
+  /**
+   * Adds one unit. Stock is the branch quantity the backend reported.
+   * Returns true if the cart changed, false if blocked by stock.
+   */
   addProduct(product) {
+    const available = Number(product.stock) || 0;
+    const existing = get().items.find((i) => i.product.id === product.id);
+    const nextQty = (existing?.quantity ?? 0) + 1;
+    if (available <= 0 || nextQty > available) return false;
     set((state) => {
-      const existing = state.items.find((i) => i.product.id === product.id);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+            i.product.id === product.id ? { ...i, product, quantity: nextQty, unitPrice: product.price } : i
           ),
         };
       }
       return { items: [...state.items, { product, quantity: 1, unitPrice: product.price }] };
     });
+    return true;
   },
 
   /**
-   * Add a product to the cart with an explicit quantity/price (used by the
-   * product-edit modal), or overwrite an already-present line for the same
-   * product with the new quantity/price rather than incrementing it — the
-   * modal always shows the item's full intended state, not a delta.
-   * `unitPrice` is a bill-level override only; `product.price` (the master/
-   * catalog price) is never mutated.
+   * Add a product with an explicit quantity (used by the edit modal), or
+   * overwrite the existing line's quantity. Quantity is capped at the
+   * branch stock the backend reported; there is no price override.
+   * Returns true if applied, false if blocked (zero stock / over stock).
    */
-  upsertCartItem(product, { quantity, unitPrice }) {
+  upsertCartItem(product, { quantity }) {
+    const available = Number(product.stock) || 0;
+    if (available <= 0 || quantity > available) return false;
     set((state) => {
       const existing = state.items.find((i) => i.product.id === product.id);
-      const resolvedPrice = unitPrice ?? product.price;
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.product.id === product.id ? { ...i, quantity, unitPrice: resolvedPrice } : i
+            i.product.id === product.id ? { ...i, product, quantity, unitPrice: product.price } : i
           ),
         };
       }
-      return { items: [...state.items, { product, quantity, unitPrice: resolvedPrice }] };
+      return { items: [...state.items, { product, quantity, unitPrice: product.price }] };
     });
+    return true;
   },
 
   updateQuantity(productId, quantity) {
@@ -48,7 +59,13 @@ export const useCartStore = create((set, get) => ({
         return { items: state.items.filter((i) => i.product.id !== productId) };
       }
       return {
-        items: state.items.map((i) => (i.product.id === productId ? { ...i, quantity } : i)),
+        items: state.items.map((i) => {
+          if (i.product.id !== productId) return i;
+          // Never let a cart line exceed the branch stock the backend reported.
+          const available = Number(i.product.stock);
+          const capped = Number.isFinite(available) ? Math.min(quantity, available) : quantity;
+          return { ...i, quantity: capped };
+        }),
       };
     });
   },

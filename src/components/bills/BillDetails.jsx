@@ -11,6 +11,15 @@ export function BillDetails({ open, onClose, bill }) {
 
   return (
     <Modal open={open} onClose={onClose} title={`Bill ${bill.billNumber}`} className="max-w-xl">
+      {bill.status === 'cancelled' && (
+        <div role="status" className="mb-4 rounded-[10px] bg-danger-500/10 px-3.5 py-3 text-sm text-danger-600">
+          <p className="font-semibold">This bill was cancelled by the administrator.</p>
+          {bill.cancelledAt && <p className="mt-0.5 text-xs">{formatDateTime(bill.cancelledAt)}</p>}
+          {bill.cancelReason && <p className="mt-0.5 text-xs">Reason: {bill.cancelReason}</p>}
+          <p className="mt-0.5 text-xs">Its amount is excluded from sales totals.</p>
+        </div>
+      )}
+
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div>
           <dt className="text-charcoal-400">Shop</dt>
@@ -92,9 +101,11 @@ export function BillDetails({ open, onClose, bill }) {
         </dl>
       </div>
 
-      <Button variant="outline" className="mt-5 w-full" onClick={() => printReceipt(bill)}>
-        <Printer className="size-4" /> Reprint Receipt
-      </Button>
+      {bill.status !== 'cancelled' && (
+        <Button variant="outline" className="mt-5 w-full" onClick={() => printReceipt(bill)}>
+          <Printer className="size-4" /> Reprint Receipt
+        </Button>
+      )}
     </Modal>
   );
 }

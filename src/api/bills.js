@@ -14,6 +14,15 @@ import { stubApi } from './stub';
  * The backend is the final authority on whether a checkout succeeds —
  * see payments.js callers for the "never trust frontend totals" note.
  */
+/**
+ * Phase 2 Stage 2.5/2.8: the client NEVER supplies a selling price. Only
+ * product ids and quantities cross the wire; the backend resolves the
+ * effective branch price (branch override, else common price) itself.
+ */
+function toPricelessItems(items = []) {
+  return items.map((i) => ({ product: { id: i.product.id }, quantity: i.quantity }));
+}
+
 export async function getHeldBills(shopId) {
   if (USE_STUB_API) return stubApi.getHeldBills(shopId);
   const { data } = await apiClient.get('/bills/held', { params: { shopId } });
@@ -22,7 +31,11 @@ export async function getHeldBills(shopId) {
 
 export async function holdBill(bill) {
   if (USE_STUB_API) return stubApi.holdBill(bill);
-  const { data } = await apiClient.post('/bills/hold', bill);
+  const { data } = await apiClient.post('/bills/hold', {
+    label: bill.label,
+    customer: bill.customer ? { id: bill.customer.id } : null,
+    items: toPricelessItems(bill.items),
+  });
   return data;
 }
 
@@ -34,13 +47,19 @@ export async function deleteHeldBill(id) {
 
 export async function checkoutBill(payload) {
   if (USE_STUB_API) return stubApi.checkoutBill(payload);
-  const { data } = await apiClient.post('/bills/checkout', payload);
+  const { data } = await apiClient.post('/bills/checkout', {
+    customer: payload.customer ? { id: payload.customer.id } : null,
+    items: toPricelessItems(payload.items),
+    payments: payload.payments,
+    idempotencyKey: payload.idempotencyKey,
+  });
   return data;
 }
 
 export async function getBillHistory(params) {
   if (USE_STUB_API) return stubApi.getBillHistory(params);
-  const { data } = await apiClient.get('/bills/history', { params });
+  // includeCancelled: cancelled bills stay visible (clearly labelled).
+  const { data } = await apiClient.get('/bills/history', { params: { ...params, includeCancelled: 'true' } });
   return data;
 }
 

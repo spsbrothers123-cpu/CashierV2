@@ -1,5 +1,7 @@
-import { Plus, X, AlertCircle } from 'lucide-react';
+import { Plus, X, AlertCircle, QrCode } from 'lucide-react';
 import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { normalizeUpiReference, toPaise, validateUpiReference } from '@/utils/upi';
 import { formatCurrency } from '@/utils/currency';
 import { cn } from '@/utils/cn';
 
@@ -10,13 +12,27 @@ const METHODS = [
   { id: 'credit', label: 'Credit' },
 ];
 
-export function SplitPaymentEditor({ lines, onChange, grandTotal, creditAllowed }) {
+export function SplitPaymentEditor({ lines, onChange, grandTotal, creditAllowed, onShowUpiQr }) {
   const paid = lines.reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
   const remaining = Math.round((grandTotal - paid) * 100) / 100;
   const isFullyPaid = Math.abs(remaining) < 0.005 && lines.length > 0;
 
   function updateLine(id, patch) {
-    onChange(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+    onChange(
+      lines.map((l) => {
+        if (l.id !== id) return l;
+        const next = { ...l, ...patch };
+        // A confirmed UPI reference belongs to one specific QR (amount + method).
+        // If either changes, that reference is stale — clear it so the cashier
+        // must generate and confirm a fresh QR.
+        const amountChanged = 'amount' in patch && patch.amount !== l.amount;
+        const methodChanged = 'method' in patch && patch.method !== l.method;
+        if ((l.method === 'upi' && amountChanged) || (methodChanged && (l.method === 'upi' || patch.method === 'upi'))) {
+          next.reference = '';
+        }
+        return next;
+      })
+    );
   }
 
   function removeLine(id) {
@@ -78,14 +94,32 @@ export function SplitPaymentEditor({ lines, onChange, grandTotal, creditAllowed 
                 />
               </div>
             </div>
-            {(line.method === 'card' || line.method === 'upi') && (
+            {line.method === 'card' && (
               <input
                 type="text"
                 value={line.reference}
                 onChange={(e) => updateLine(line.id, { reference: e.target.value })}
-                placeholder={`${line.method === 'card' ? 'Card' : 'UPI'} reference (optional)`}
+                placeholder="Card reference (optional)"
                 className="mt-2 h-10 w-full rounded-[10px] border border-charcoal-900/12 bg-surface-white px-3 text-sm outline-none focus:border-egg-500"
               />
+            )}
+            {line.method === 'upi' && (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-[10px] bg-charcoal-900/4 px-3 py-2">
+                <span className="min-w-0 truncate text-xs text-charcoal-500">
+                  {validateUpiReference(line.reference)
+                    ? 'UPI reference not confirmed'
+                    : `Reference: ${normalizeUpiReference(line.reference)}`}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={toPaise(line.amount) === null}
+                  onClick={() => onShowUpiQr?.(line)}
+                >
+                  <QrCode className="size-4" aria-hidden /> Show QR
+                </Button>
+              </div>
             )}
           </div>
         ))}

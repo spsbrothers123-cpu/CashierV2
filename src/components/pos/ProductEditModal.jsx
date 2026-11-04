@@ -18,28 +18,25 @@ function roundTo(value, decimals) {
  * product is already in the cart) pre-fills quantity/price so re-selecting
  * a cart line edits it in place instead of creating a duplicate.
  *
- * Price edits here are a bill-level override only — the modal never touches
- * `product.price` (the master/catalog price); it only reports back the
- * chosen `unitPrice` for this cart line via `onConfirm`.
+ * Phase 2 Stage 2.5/2.8: there is NO price override. The selling price is
+ * resolved by the backend (branch override, else common price) and shown
+ * read-only. Quantity cannot exceed the branch's available stock.
  */
 export function ProductEditModal({ open, product, existingItem, onConfirm, onCancel }) {
   const allowDecimal = supportsDecimalQuantity(product);
   const step = quantityStep(product);
 
   const initialQuantity = existingItem?.quantity ?? 1;
-  const initialPrice = existingItem?.unitPrice ?? product?.price ?? 0;
 
   const [quantityStr, setQuantityStr] = useState(String(initialQuantity));
-  const [priceStr, setPriceStr] = useState(String(initialPrice));
-  const [touched, setTouched] = useState({ quantity: false, price: false });
+  const [touched, setTouched] = useState({ quantity: false });
   const [shake, setShake] = useState(false);
 
   // Re-seed whenever a new product/edit target opens.
   useEffect(() => {
     if (open) {
       setQuantityStr(String(existingItem?.quantity ?? 1));
-      setPriceStr(String(existingItem?.unitPrice ?? product?.price ?? 0));
-      setTouched({ quantity: false, price: false });
+      setTouched({ quantity: false });
       setShake(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,12 +45,14 @@ export function ProductEditModal({ open, product, existingItem, onConfirm, onCan
   if (!open || !product) return null;
 
   const quantityNum = Number(quantityStr);
-  const priceNum = Number(priceStr);
+  const available = Number(product?.stock) || 0;
+  const unitPrice = Number(product?.price) || 0;
 
   const quantityError = (() => {
     if (quantityStr.trim() === '') return 'Enter a quantity.';
     if (Number.isNaN(quantityNum)) return 'Quantity must be a number.';
     if (quantityNum <= 0) return 'Quantity must be greater than zero.';
+    if (quantityNum > available) return `Only ${available} ${product.unit || 'unit'}(s) available at this branch.`;
     if (quantityNum > MAX_QUANTITY) return `Quantity seems too large (max ${MAX_QUANTITY}).`;
     if (!allowDecimal && !Number.isInteger(quantityNum)) {
       return `${product.unit || 'This item'} can't be sold in fractional quantities.`;
@@ -61,21 +60,13 @@ export function ProductEditModal({ open, product, existingItem, onConfirm, onCan
     return null;
   })();
 
-  const priceError = (() => {
-    if (priceStr.trim() === '') return 'Enter a price.';
-    if (Number.isNaN(priceNum)) return 'Price must be a number.';
-    if (priceNum < 0) return 'Price cannot be negative.';
-    return null;
-  })();
+  const isValid = !quantityError;
+  const total = isValid ? roundTo(quantityNum * unitPrice, 2) : null;
 
-  const isValid = !quantityError && !priceError;
-  const total = isValid ? roundTo(quantityNum * priceNum, 2) : null;
-
-  const isDirty = quantityStr !== String(initialQuantity) || priceStr !== String(initialPrice);
-  const priceOverridden = isValid && roundTo(priceNum, 2) !== roundTo(product.price, 2);
+  const isDirty = quantityStr !== String(initialQuantity);
 
   function requestClose() {
-    setTouched({ quantity: false, price: false });
+    setTouched({ quantity: false });
     onCancel();
   }
 
@@ -92,14 +83,14 @@ export function ProductEditModal({ open, product, existingItem, onConfirm, onCan
 
   function nudgeQuantity(delta) {
     const base = Number.isNaN(quantityNum) ? 0 : quantityNum;
-    const next = roundTo(Math.max(step, base + delta), allowDecimal ? 2 : 0);
+    const next = roundTo(Math.min(available, Math.max(step, base + delta)), allowDecimal ? 2 : 0);
     setQuantityStr(String(next));
   }
 
   function handleConfirm() {
-    setTouched({ quantity: true, price: true });
+    setTouched({ quantity: true });
     if (!isValid) return;
-    onConfirm({ quantity: quantityNum, unitPrice: roundTo(priceNum, 2) });
+    onConfirm({ quantity: quantityNum });
   }
 
   return (
@@ -135,7 +126,7 @@ export function ProductEditModal({ open, product, existingItem, onConfirm, onCan
           <p className="truncate text-sm font-semibold text-charcoal-900">{product.name}</p>
           <p className="mt-0.5 text-xs text-charcoal-400">
             {product.sku ? `${product.sku} · ` : ''}
-            Master price: {formatCurrency(product.price)} / {product.unit}
+            {formatCurrency(product.price)} / {product.unit} · {available} available
           </p>
         </div>
       </div>
@@ -180,39 +171,12 @@ export function ProductEditModal({ open, product, existingItem, onConfirm, onCan
         {quantityError && touched.quantity && <p className="mt-1.5 text-sm text-danger-600">{quantityError}</p>}
       </div>
 
-      {/* Price */}
-      <div className="mt-3.5">
-        <label htmlFor="edit-price" className="mb-1.5 block text-sm font-medium text-charcoal-800">
-          Selling Price (this bill)
-        </label>
-        <div className="relative">
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-charcoal-300">
-            ₹
-          </span>
-          <input
-            id="edit-price"
-            type="text"
-            inputMode="decimal"
-            value={priceStr}
-            onChange={(e) => setPriceStr(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, price: true }))}
-            className={cn(
-              'h-11 w-full rounded-[10px] border bg-surface-white pl-7 pr-3 text-sm outline-none',
-              priceError && touched.price
-                ? 'border-danger-500 focus:border-danger-500'
-                : 'border-charcoal-900/12 focus:border-egg-500'
-            )}
-          />
-        </div>
-        {priceError && touched.price ? (
-          <p className="mt-1.5 text-sm text-danger-600">{priceError}</p>
-        ) : (
-          priceOverridden && (
-            <p className="mt-1.5 text-xs text-egg-600">
-              Overridden for this bill only — catalog price stays {formatCurrency(product.price)}.
-            </p>
-          )
-        )}
+      {/* Price — read-only; resolved by the backend for this branch */}
+      <div className="mt-3.5 flex items-center justify-between rounded-[10px] border border-charcoal-900/8 px-3.5 py-2.5">
+        <span className="text-sm font-medium text-charcoal-800">Selling price</span>
+        <span className="text-sm font-semibold text-charcoal-900">
+          {formatCurrency(unitPrice)} / {product.unit}
+        </span>
       </div>
 
       {/* Total */}

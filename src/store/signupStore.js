@@ -17,13 +17,13 @@ export const useSignupStore = create((set) => ({
   requestId: null,
   name: '',
   email: '',
-  branchName: '',
+  shopId: '',
   step: 'invite', // 'invite' | 'account' | 'verify' | 'approval'
 
   markInvitationVerified: ({ verificationToken }) =>
     set({ invitationVerified: true, verificationToken, step: 'account' }),
 
-  setBranchName: (branchName) => set({ branchName }),
+  setShopId: (shopId) => set({ shopId }),
 
   startSignupRequest: ({ requestId, name, email }) =>
     set({ requestId, name, email, step: 'verify' }),
@@ -37,7 +37,7 @@ export const useSignupStore = create((set) => ({
       requestId: null,
       name: '',
       email: '',
-      branchName: '',
+      shopId: '',
       step: 'invite',
     }),
 }));

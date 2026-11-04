@@ -1,28 +1,48 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { UserPlus, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { CashierAuthLayout } from '@/components/auth/CashierAuthLayout';
 import { AuthHeader } from '@/components/auth/AuthHeader';
 import { SignupProgress } from '@/components/auth/SignupProgress';
 import { PasswordInput } from '@/components/auth/PasswordInput';
 import { useSignupStore } from '@/store/signupStore';
-import { signup } from '@/api/auth';
+import { signup, getBranches } from '@/api/auth';
 import { isValidEmail, isPasswordValid } from '@/utils/authValidation';
 
 export function SignupPage() {
   const navigate = useNavigate();
   const invitationVerified = useSignupStore((s) => s.invitationVerified);
   const verificationToken = useSignupStore((s) => s.verificationToken);
-  const branchName = useSignupStore((s) => s.branchName);
-  const setBranchName = useSignupStore((s) => s.setBranchName);
+  const shopId = useSignupStore((s) => s.shopId);
+  const setShopId = useSignupStore((s) => s.setShopId);
   const startSignupRequest = useSignupStore((s) => s.startSignupRequest);
 
   const [fields, setFields] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [branches, setBranches] = useState([]);
+  const [branchesStatus, setBranchesStatus] = useState('loading'); // loading | success | error
+
+  // Branches come from the backend (GET /auth/branches) — never typed in.
+  useEffect(() => {
+    let cancelled = false;
+    getBranches()
+      .then((rows) => {
+        if (cancelled) return;
+        setBranches(rows);
+        setBranchesStatus('success');
+      })
+      .catch(() => {
+        if (!cancelled) setBranchesStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // A cashier can only reach Account Details after their invitation code has
   // been verified — direct link / refresh / back-button lands here otherwise.
@@ -40,7 +60,7 @@ export function SignupPage() {
     if (!fields.name.trim()) errors.name = 'Please enter your name.';
     if (!fields.email.trim()) errors.email = 'Please enter your email.';
     else if (!isValidEmail(fields.email)) errors.email = 'Enter a valid email address.';
-    if (!branchName.trim()) errors.branchName = 'Please enter your branch name.';
+    if (!shopId) errors.shopId = 'Please select your branch.';
     if (!fields.password) errors.password = 'Please enter a password.';
     else if (!isPasswordValid(fields.password)) errors.password = 'Password does not meet the requirements.';
     if (!fields.confirmPassword) errors.confirmPassword = 'Please confirm your password.';
@@ -60,7 +80,7 @@ export function SignupPage() {
         name: fields.name.trim(),
         email: fields.email.trim(),
         password: fields.password,
-        branchName: branchName.trim(),
+        shopId,
         verificationToken,
       });
       startSignupRequest({ requestId, name: fields.name.trim(), email });
@@ -103,22 +123,41 @@ export function SignupPage() {
             disabled={submitting}
             required
           />
-          <Input
-            label="Branch Name"
-            type="text"
-            name="branchName"
-            autoComplete="off"
-            value={branchName}
-            onChange={(e) => {
-              setBranchName(e.target.value);
-              if (fieldErrors.branchName) setFieldErrors((err) => ({ ...err, branchName: undefined }));
-            }}
-            placeholder="e.g. Bengaluru Central"
-            hint="The shop branch you'll be working at."
-            error={fieldErrors.branchName}
-            disabled={submitting}
-            required
-          />
+          <div>
+            <Select
+              label="Branch"
+              name="shopId"
+              value={shopId}
+              onChange={(e) => {
+                setShopId(e.target.value);
+                if (fieldErrors.shopId) setFieldErrors((err) => ({ ...err, shopId: undefined }));
+              }}
+              disabled={submitting || branchesStatus !== 'success'}
+              required
+            >
+              <option value="">
+                {branchesStatus === 'loading' ? 'Loading branches…' : 'Select your branch…'}
+              </option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id} disabled={!b.available}>
+                  {b.name}
+                  {b.location && b.location !== b.name ? ` — ${b.location}` : ''}
+                  {!b.available ? ' (already has a cashier)' : ''}
+                </option>
+              ))}
+            </Select>
+            {fieldErrors.shopId ? (
+              <p className="mt-1.5 text-sm text-danger-600">{fieldErrors.shopId}</p>
+            ) : branchesStatus === 'error' ? (
+              <p className="mt-1.5 text-sm text-danger-600">
+                Couldn't load branches. Check your connection and reload this page.
+              </p>
+            ) : (
+              <p className="mt-1.5 text-xs text-charcoal-400">
+                Each branch has one cashier. Ask the administrator if your branch is missing.
+              </p>
+            )}
+          </div>
           <PasswordInput
             label="Password"
             name="password"

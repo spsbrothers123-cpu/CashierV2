@@ -91,9 +91,9 @@ export function LoginPage() {
                 />
                 Remember me
               </label>
-              <button type="button" className="text-sm font-medium text-egg-600 hover:underline">
+              <Link to="/cashier/forgot-password" className="text-sm font-medium text-egg-600 hover:underline">
                 Forgot password?
-              </button>
+              </Link>
             </div>
           </div>
 

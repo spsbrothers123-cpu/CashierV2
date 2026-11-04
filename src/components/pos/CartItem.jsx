@@ -5,7 +5,7 @@ export function CartItem({ item, onUpdateQuantity, onRemove, onEdit }) {
   const { product, quantity } = item;
   const unitPrice = item.unitPrice ?? product.price;
   const lineTotal = unitPrice * quantity;
-  const priceOverridden = unitPrice !== product.price;
+  const atStockLimit = quantity >= (Number(product.stock) || 0);
 
   return (
     <div className="flex items-center gap-3 py-3">
@@ -25,7 +25,7 @@ export function CartItem({ item, onUpdateQuantity, onRemove, onEdit }) {
         <p className="truncate text-sm font-medium text-charcoal-900">{product.name}</p>
         <p className="text-xs text-charcoal-300">
           {formatCurrency(unitPrice)} / {product.unit}
-          {priceOverridden && <span className="ml-1.5 text-egg-600">(edited)</span>}
+          {atStockLimit && <span className="ml-1.5 text-warning-600">(max stock)</span>}
         </p>
       </button>
 
@@ -41,7 +41,8 @@ export function CartItem({ item, onUpdateQuantity, onRemove, onEdit }) {
         <button
           onClick={() => onUpdateQuantity(product.id, quantity + 1)}
           aria-label="Increase quantity"
-          className="flex size-6 items-center justify-center rounded-full text-charcoal-600 hover:bg-charcoal-900/6"
+          disabled={atStockLimit}
+          className="flex size-6 items-center justify-center rounded-full text-charcoal-600 hover:bg-charcoal-900/6 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus className="size-3.5" />
         </button>
