@@ -15,7 +15,7 @@ import { TopHeader } from './TopHeader';
 import { MobileBottomNav } from './MobileBottomNav';
 import { Drawer } from '@/components/ui/Drawer';
 import { useAuthStore } from '@/store/authStore';
-import { useSessionStore } from '@/store/sessionStore';
+import { useSessionStore, sessionBelongsTo } from '@/store/sessionStore';
 import { cn } from '@/utils/cn';
 
 const DRAWER_ITEMS = [
@@ -33,7 +33,8 @@ export function CashierLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const cashier = useAuthStore((s) => s.cashier);
   const logout = useAuthStore((s) => s.logout);
-  const session = useSessionStore((s) => s.session);
+  const storedSession = useSessionStore((s) => s.session);
+  const session = sessionBelongsTo(storedSession, cashier?.id) ? storedSession : null;
 
   return (
     <div className="flex h-dvh bg-ivory-100">

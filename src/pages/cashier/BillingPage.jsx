@@ -12,7 +12,7 @@ import { BillDetails } from '@/components/bills/BillDetails';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
-import { useSessionStore } from '@/store/sessionStore';
+import { useSessionStore, sessionBelongsTo } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useToast } from '@/components/ui/Toast';
 import { searchProducts, getCategories } from '@/api/products';
@@ -21,7 +21,8 @@ import { describeCartChanges } from '@/utils/cartReconcile';
 
 export function BillingPage() {
   const cashier = useAuthStore((s) => s.cashier);
-  const session = useSessionStore((s) => s.session);
+  const storedSession = useSessionStore((s) => s.session);
+  const session = sessionBelongsTo(storedSession, cashier?.id) ? storedSession : null;
   const refreshSessionSummary = useSessionStore((s) => s.refreshSummary);
   const catalogueView = useSettingsStore((s) => s.catalogueView);
   const { push } = useToast();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { History, Printer, Eye } from 'lucide-react';
 import { SearchBar } from '@/components/pos/SearchBar';
 import { Select } from '@/components/ui/Select';
@@ -26,8 +26,12 @@ export function HistoryPage() {
   const [bills, setBills] = useState([]);
   const [error, setError] = useState(null);
   const [viewingBill, setViewingBill] = useState(null);
+  // Only the newest history request may update the list (see load).
+  const requestId = useRef(0);
 
   const load = useCallback(() => {
+    // A slower, older response must never overwrite a newer one.
+    const id = ++requestId.current;
     setStatus('loading');
     getBillHistory({
       shopId: cashier?.shop?.id,
@@ -37,10 +41,12 @@ export function HistoryPage() {
       dateTo: dateTo ? `${dateTo}T23:59:59` : undefined,
     })
       .then((res) => {
+        if (id !== requestId.current) return;
         setBills(res);
         setStatus('success');
       })
       .catch((err) => {
+        if (id !== requestId.current) return;
         setError(err);
         setStatus('error');
       });

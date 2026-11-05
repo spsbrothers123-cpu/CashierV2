@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Package, PackageSearch } from 'lucide-react';
+import { Package, PackageSearch, RefreshCw } from 'lucide-react';
 import { SearchBar } from '@/components/pos/SearchBar';
 import { CategoryFilter } from '@/components/pos/CategoryFilter';
 import { Badge } from '@/components/ui/Badge';
@@ -9,12 +9,10 @@ import { Skeleton } from '@/components/ui/LoadingSkeleton';
 import { useDebounce } from '@/hooks/useDebounce';
 import { searchProducts, getCategories } from '@/api/products';
 import { formatCurrency } from '@/utils/currency';
+import { getStockState, STOCK_TONE } from '@/utils/stockStatus';
+import { useAuthStore } from '@/store/authStore';
 
-function stockStatus(stock) {
-  if (stock <= 0) return { label: 'Out of Stock', tone: 'danger' };
-  if (stock <= 5) return { label: 'Low Stock', tone: 'warning' };
-  return { label: 'In Stock', tone: 'success' };
-}
+const STOCK_LABEL = { out: 'Out of Stock', low: 'Low Stock', in: 'In Stock' };
 
 export function InventoryPage() {
   const [query, setQuery] = useState('');
@@ -24,42 +22,94 @@ export function InventoryPage() {
   const [status, setStatus] = useState('loading');
   const [products, setProducts] = useState([]);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  // Branch name is shown only when the authenticated session already carries it.
+  const branchName = useAuthStore((st) => st.cashier?.shop?.name);
   // Only the newest product request may update the list (see load).
   const requestId = useRef(0);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     getCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
 
-  const load = useCallback(() => {
-    // A slower, older response must never overwrite a newer one.
-    const id = ++requestId.current;
-    setStatus('loading');
-    searchProducts({ query: debouncedQuery, category })
-      .then((res) => {
-        if (id !== requestId.current) return;
-        setProducts(res);
-        setStatus('success');
-      })
-      .catch((err) => {
-        if (id !== requestId.current) return;
-        setError(err);
-        setStatus('error');
-      });
-  }, [debouncedQuery, category]);
+  // `silent` refreshes keep the current list on screen (no skeleton flash) and
+  // keep it if the refresh fails; the initial/filter load shows the full states.
+  const load = useCallback(
+    ({ silent = false } = {}) => {
+      // A slower, older response must never overwrite a newer one.
+      const id = ++requestId.current;
+      inFlight.current = true;
+      if (silent) setRefreshing(true);
+      else setStatus('loading');
+      return searchProducts({ query: debouncedQuery, category })
+        .then((res) => {
+          if (id !== requestId.current) return;
+          setProducts(res);
+          setStatus('success');
+        })
+        .catch((err) => {
+          if (id !== requestId.current) return;
+          if (silent) return;
+          setError(err);
+          setStatus('error');
+        })
+        .finally(() => {
+          if (id !== requestId.current) return;
+          inFlight.current = false;
+          setRefreshing(false);
+        });
+    },
+    [debouncedQuery, category]
+  );
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Always call the latest load (current search/category) from event handlers.
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  // Stock can change while this tab is in the background (sales on another
+  // device, Admin adjustments). Refetch when the tab becomes visible/focused.
+  useEffect(() => {
+    function refreshIfIdle() {
+      if (document.visibilityState === 'hidden' || inFlight.current) return;
+      loadRef.current({ silent: true });
+    }
+    document.addEventListener('visibilitychange', refreshIfIdle);
+    window.addEventListener('focus', refreshIfIdle);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshIfIdle);
+      window.removeEventListener('focus', refreshIfIdle);
+      // Drop any response that lands after unmount.
+      requestId.current += 1;
+    };
+  }, []);
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-      <div className="flex items-center gap-2.5">
-        <Package className="size-5 text-charcoal-700" aria-hidden />
-        <h1 className="font-display text-xl font-bold text-charcoal-900 sm:text-2xl">Inventory</h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Package className="size-5 text-charcoal-700" aria-hidden />
+          <h1 className="font-display text-xl font-bold text-charcoal-900 sm:text-2xl">Inventory</h1>
+        </div>
+        <button
+          type="button"
+          onClick={() => load({ silent: true })}
+          disabled={refreshing || status === 'loading'}
+          className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-charcoal-900/10 px-3 text-sm font-medium text-charcoal-700 transition-colors hover:bg-charcoal-900/4 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
+          Refresh
+        </button>
       </div>
+      {branchName && <p className="mt-1 text-sm font-medium text-charcoal-700">{branchName}</p>}
       <p className="mt-1 text-sm text-charcoal-500">
-        Stock levels are view-only here. Adding, editing, or removing products requires shop-admin access.
+        Stock levels are view-only here. Products and stock are managed by the central Admin.
       </p>
 
       <div className="mt-5 space-y-3">
@@ -106,7 +156,7 @@ export function InventoryPage() {
               </thead>
               <tbody className="divide-y divide-charcoal-900/6">
                 {products.map((p) => {
-                  const s = stockStatus(p.stock);
+                  const state = getStockState(p);
                   return (
                     <tr key={p.id}>
                       <td className="px-4 py-3 font-medium text-charcoal-900">{p.name}</td>
@@ -117,7 +167,7 @@ export function InventoryPage() {
                         {formatCurrency(p.price)}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge tone={s.tone}>{s.label}</Badge>
+                        <Badge tone={STOCK_TONE[state]}>{STOCK_LABEL[state]}</Badge>
                       </td>
                     </tr>
                   );

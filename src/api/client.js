@@ -44,13 +44,35 @@ export function registerUnauthorizedHandler(fn) {
   onUnauthorized = fn;
 }
 
+/**
+ * Decides whether an error response means the Cashier's AUTHENTICATION is no
+ * longer valid (so local auth state must be dropped) — as opposed to an
+ * ordinary authorization denial, which must never log the Cashier out.
+ *
+ *  - 401: the token/session is missing, expired or revoked  -> invalid.
+ *         Exception: INVALID_CREDENTIALS is a failed login attempt; there is
+ *         no session to invalidate.
+ *  - 403: invalid ONLY for ACCOUNT_NOT_ACTIVE (suspended/deactivated account
+ *         with a still-unexpired token). Every other 403 (ROLE_NOT_ALLOWED,
+ *         SHOP_MISMATCH, NO_SHOP, SHOP_ACCESS_DENIED, an uncoded 403, ...)
+ *         is "you may not do that" and leaves the signed-in session intact.
+ */
+export function isAuthInvalidation(status, code) {
+  if (status === 401) return code !== 'INVALID_CREDENTIALS';
+  if (status === 403) return code === 'ACCOUNT_NOT_ACTIVE';
+  return false;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Backend remains the final authority on authorization — a 401/403
-    // here always wins over any locally cached auth state.
-    if (error?.response?.status === 401 || error?.response?.status === 403) {
-      if (onUnauthorized) onUnauthorized(error.response.status);
+    // Backend remains the final authority: a response that says the
+    // authentication is invalid always wins over any locally cached auth
+    // state. Plain authorization-denied responses are passed through.
+    const status = error?.response?.status;
+    const code = error?.response?.data?.code;
+    if (isAuthInvalidation(status, code)) {
+      if (onUnauthorized) onUnauthorized(status, code);
     }
     return Promise.reject(normalizeError(error));
   }

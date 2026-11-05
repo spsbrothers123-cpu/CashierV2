@@ -6,12 +6,13 @@ import { ClosedSessionSummary } from '@/components/session/ClosedSessionSummary'
 import { CloseSessionForm } from '@/components/session/CloseSessionForm';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { useAuthStore } from '@/store/authStore';
-import { useSessionStore } from '@/store/sessionStore';
+import { useSessionStore, sessionBelongsTo } from '@/store/sessionStore';
 import { useToast } from '@/components/ui/Toast';
 
 export function SessionsPage() {
   const cashier = useAuthStore((s) => s.cashier);
-  const { session, status, error, closing, loadSession, startSession, closeSession } = useSessionStore();
+  const { session: storedSession, status, error, closing, loadSession, startSession, closeSession } = useSessionStore();
+  const session = sessionBelongsTo(storedSession, cashier?.id) ? storedSession : null;
   const { push } = useToast();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null);

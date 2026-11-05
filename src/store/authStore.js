@@ -2,6 +2,19 @@ import { create } from 'zustand';
 import { login as apiLogin, fetchCurrentCashier, logout as apiLogout } from '@/api/auth';
 import { getToken, setToken, registerUnauthorizedHandler } from '@/api/client';
 import { useCartStore } from '@/store/cartStore';
+import { useSessionStore } from '@/store/sessionStore';
+
+/**
+ * Everything held in memory on behalf of ONE signed-in cashier. It must never
+ * outlive that cashier's authentication: a different cashier signing in on the
+ * same device/tab must start from a clean slate. (This clears the client's
+ * cached copy only — it never closes or alters the cashier's session on the
+ * backend; closing a shift stays an explicit action.)
+ */
+function resetPerCashierState() {
+  useCartStore.getState().clearCart();
+  useSessionStore.getState().clear();
+}
 
 export const useAuthStore = create((set) => ({
   cashier: null,
@@ -45,18 +58,27 @@ export const useAuthStore = create((set) => ({
       await apiLogout();
     } finally {
       // Clear sensitive cached data on the way out. Logout intentionally
-      // does NOT touch the cashier session (see sessionStore) — closing an
-      // active shift is a separate, explicit action per the project spec.
+      // does NOT close the cashier's session on the backend — closing an
+      // active shift is a separate, explicit action per the project spec —
+      // but the cached copy must not survive for the next person to sign in.
       setToken(null);
-      useCartStore.getState().clearCart();
+      resetPerCashierState();
       set({ cashier: null, status: 'unauthenticated', error: null });
     }
   },
 }));
 
-// If any API call comes back 401/403, forcibly log out locally —
-// backend authorization always wins over cached client state.
+// If the backend says the authentication itself is no longer valid (see
+// isAuthInvalidation in api/client.js — NOT every 403), drop local auth state
+// and everything cached for that cashier. Backend invalidation always wins.
 registerUnauthorizedHandler(() => {
   setToken(null);
+  resetPerCashierState();
   useAuthStore.setState({ cashier: null, status: 'unauthenticated' });
+});
+
+// Safety net for every path (login, hydrate, logout, invalidation): whenever
+// the signed-in cashier changes, nothing cached for the previous one remains.
+useAuthStore.subscribe((state, prev) => {
+  if ((state.cashier?.id ?? null) !== (prev.cashier?.id ?? null)) resetPerCashierState();
 });

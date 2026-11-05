@@ -33,6 +33,7 @@
  * @property {number} price
  * @property {string} unit
  * @property {number} stock
+ * @property {number} [lowStockThreshold]  // per-product, from the backend; 0/absent = no low-stock warning
  * @property {string} [imageUrl]
  *
  * @typedef {Object} CartItem

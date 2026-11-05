@@ -2,10 +2,12 @@ import { Egg, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/utils/currency';
 import { cn } from '@/utils/cn';
+import { getStockState } from '@/utils/stockStatus';
 
 export function ProductCard({ product, quantityInCart = 0, onSelect }) {
-  const outOfStock = product.stock <= 0;
-  const lowStock = !outOfStock && product.stock <= 5;
+  const stockState = getStockState(product);
+  const outOfStock = stockState === 'out';
+  const lowStock = stockState === 'low';
 
   return (
     <div
