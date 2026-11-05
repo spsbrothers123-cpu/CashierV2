@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Package, PackageSearch } from 'lucide-react';
 import { SearchBar } from '@/components/pos/SearchBar';
 import { CategoryFilter } from '@/components/pos/CategoryFilter';
@@ -24,19 +24,25 @@ export function InventoryPage() {
   const [status, setStatus] = useState('loading');
   const [products, setProducts] = useState([]);
   const [error, setError] = useState(null);
+  // Only the newest product request may update the list (see load).
+  const requestId = useRef(0);
 
   useEffect(() => {
     getCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
 
   const load = useCallback(() => {
+    // A slower, older response must never overwrite a newer one.
+    const id = ++requestId.current;
     setStatus('loading');
     searchProducts({ query: debouncedQuery, category })
       .then((res) => {
+        if (id !== requestId.current) return;
         setProducts(res);
         setStatus('success');
       })
       .catch((err) => {
+        if (id !== requestId.current) return;
         setError(err);
         setStatus('error');
       });

@@ -3,7 +3,6 @@ import { LoginPage } from '@/pages/cashier/LoginPage';
 import { ForgotPasswordPage } from '@/pages/cashier/ForgotPasswordPage';
 import { InvitationCodePage } from '@/pages/cashier/InvitationCodePage';
 import { SignupPage } from '@/pages/cashier/SignupPage';
-import { VerifyOtpPage } from '@/pages/cashier/VerifyOtpPage';
 import { PendingApprovalPage } from '@/pages/cashier/PendingApprovalPage';
 import { SessionsPage } from '@/pages/cashier/SessionsPage';
 import { BillingPage } from '@/pages/cashier/BillingPage';
@@ -28,7 +27,6 @@ export default function App() {
       {/* Cashier Sign Up -> Invite Code -> Account Details -> Complete Registration */}
       <Route path="/cashier/signup" element={<InvitationCodePage />} />
       <Route path="/cashier/signup/account" element={<SignupPage />} />
-      <Route path="/cashier/signup/verify" element={<VerifyOtpPage />} />
       <Route path="/cashier/signup/pending" element={<PendingApprovalPage />} />
 
       <Route element={<ProtectedRoute />}>

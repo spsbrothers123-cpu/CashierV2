@@ -4,12 +4,11 @@ import { cn } from '@/utils/cn';
 const STEPS = [
   { key: 'invite', label: 'Invite' },
   { key: 'account', label: 'Account' },
-  { key: 'verify', label: 'Verify' },
   { key: 'approval', label: 'Approval' },
 ];
 
 /**
- * Subtle 4-step progress indicator: Invite -> Account -> Verify -> Approval.
+ * Subtle 3-step progress indicator: Invite -> Account -> Approval.
  * `step` is the current step key; steps before it render as completed.
  */
 export function SignupProgress({ step, className }) {

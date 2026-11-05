@@ -20,6 +20,7 @@ import {
   validateUpiReference,
 } from '@/utils/upi';
 import { cn } from '@/utils/cn';
+import { CHECKOUT_RECONCILE_CODES } from '@/utils/cartReconcile';
 
 const METHODS = [
   { id: 'cash', label: 'Cash', icon: Wallet },
@@ -40,6 +41,7 @@ export function PaymentModal({
   onSelectCustomer,
   onSuccess,
   onViewBill,
+  onCheckoutRejected,
 }) {
   const [stage, setStage] = useState('form'); // 'form' | 'success'
   const [splitEnabled, setSplitEnabled] = useState(false);
@@ -166,6 +168,9 @@ export function PaymentModal({
       onSuccess?.(result);
     } catch (err) {
       setError(err);
+      // Stock/price moved since the cart was built: let the caller refresh the
+      // cart against the live catalogue. Nothing was created, nothing is retried.
+      if (CHECKOUT_RECONCILE_CODES.has(err?.code)) onCheckoutRejected?.(err);
       if (payments.some((p) => p.method === 'upi')) {
         // A definitive rejection created nothing, so a fresh key is safe (and
         // avoids a backend replaying a cached failure). Network errors / 5xx

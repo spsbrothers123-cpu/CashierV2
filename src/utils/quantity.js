@@ -4,6 +4,16 @@
 const DECIMAL_UNITS = new Set(['kg', 'g', 'gram', 'grams', 'l', 'ltr', 'litre', 'liter', 'ml']);
 
 /**
+ * KNOWN BACKEND BLOCKER (Phase 4, Stage 4.3): fractional quantities (e.g. 1.5 kg)
+ * are fully supported here and are sent to the backend exactly as entered —
+ * never rounded. backendV2 currently stores bill-item quantity and stock as
+ * integers and rejects non-whole quantities at checkout ("must be a whole
+ * number"), so fractional checkout and fractional held bills cannot succeed
+ * until the backend supports decimal quantities (a separately approved
+ * backend/migration change).
+ */
+
+/**
  * Whether a given product's quantity may be entered as a decimal.
  * Respects an explicit `product.allowDecimalQuantity` flag when present,
  * otherwise falls back to a heuristic based on the product's unit.

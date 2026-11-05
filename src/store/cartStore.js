@@ -70,6 +70,40 @@ export const useCartStore = create((set, get) => ({
     });
   },
 
+  /**
+   * Refreshes every cart line against the LIVE branch catalogue the backend
+   * just returned (used after a checkout was rejected for stock/price).
+   *   - line's product missing or out of stock -> removed
+   *   - quantity above available stock         -> clamped to the stock (never rounded)
+   *   - product data / price                   -> replaced by the live backend values
+   * Fractional quantities are preserved exactly; the cart is never cleared
+   * wholesale. Returns the list of changes the Cashier needs to be told about.
+   */
+  reconcileWithCatalogue(liveProducts) {
+    const live = new Map((liveProducts ?? []).map((p) => [p.id, p]));
+    const changes = [];
+    const nextItems = [];
+    for (const line of get().items) {
+      const fresh = live.get(line.product.id);
+      const stock = Number(fresh?.stock) || 0;
+      if (!fresh || stock <= 0) {
+        changes.push({ type: 'removed', name: line.product.name });
+        continue;
+      }
+      const quantity = Math.min(line.quantity, stock);
+      if (quantity < line.quantity) {
+        changes.push({ type: 'reduced', name: line.product.name, unit: fresh.unit, from: line.quantity, to: quantity });
+      }
+      const oldPrice = Number(line.unitPrice ?? line.product.price);
+      if (Number(fresh.price) !== oldPrice) {
+        changes.push({ type: 'repriced', name: line.product.name, from: oldPrice, to: Number(fresh.price) });
+      }
+      nextItems.push({ ...line, product: fresh, quantity, unitPrice: fresh.price });
+    }
+    set({ items: nextItems });
+    return changes;
+  },
+
   removeProduct(productId) {
     set((state) => ({ items: state.items.filter((i) => i.product.id !== productId) }));
   },

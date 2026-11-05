@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { SearchBar } from '@/components/pos/SearchBar';
 import { CategoryFilter } from '@/components/pos/CategoryFilter';
 import { ProductGrid } from '@/components/pos/ProductGrid';
@@ -17,6 +17,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useToast } from '@/components/ui/Toast';
 import { searchProducts, getCategories } from '@/api/products';
 import { getHeldBills, deleteHeldBill } from '@/api/bills';
+import { describeCartChanges } from '@/utils/cartReconcile';
 
 export function BillingPage() {
   const cashier = useAuthStore((s) => s.cashier);
@@ -39,6 +40,8 @@ export function BillingPage() {
   const [productStatus, setProductStatus] = useState('loading');
   const [products, setProducts] = useState([]);
   const [productError, setProductError] = useState(null);
+  // Only the newest product request may update the list (see loadProducts).
+  const productRequestId = useRef(0);
 
   // Barcode scanner
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -61,6 +64,7 @@ export function BillingPage() {
     customer,
     addProduct,
     upsertCartItem,
+    reconcileWithCatalogue,
     updateQuantity,
     removeProduct,
     setCustomer,
@@ -74,13 +78,17 @@ export function BillingPage() {
   }, []);
 
   const loadProducts = useCallback(() => {
+    // A slower, older response must never overwrite a newer one.
+    const requestId = ++productRequestId.current;
     setProductStatus('loading');
     searchProducts({ query: debouncedQuery, category })
       .then((res) => {
+        if (requestId !== productRequestId.current) return;
         setProducts(res);
         setProductStatus('success');
       })
       .catch((err) => {
+        if (requestId !== productRequestId.current) return;
         setProductError(err);
         setProductStatus('error');
       });
@@ -218,6 +226,24 @@ export function BillingPage() {
     loadProducts();
   }
 
+  // The backend rejected a checkout because stock or price moved after the
+  // lines were added. Refresh the cart from the live branch catalogue, tell the
+  // Cashier exactly what changed, and let them review before trying again.
+  async function handleCheckoutRejected() {
+    let live;
+    try {
+      live = await searchProducts({});
+    } catch {
+      return; // the backend's own message is already on screen
+    }
+    const changes = reconcileWithCatalogue(live);
+    loadProducts();
+    if (changes.length > 0) {
+      setPaymentOpen(false);
+      push(`Cart updated: ${describeCartChanges(changes)}.`, 'error');
+    }
+  }
+
   function handleClosePayment() {
     setPaymentOpen(false);
   }
@@ -319,6 +345,7 @@ export function BillingPage() {
           setCustomerOpen(true);
         }}
         onSuccess={handlePaymentSuccess}
+        onCheckoutRejected={handleCheckoutRejected}
         onViewBill={(bill) => {
           setPaymentOpen(false);
           setViewingBill(bill);

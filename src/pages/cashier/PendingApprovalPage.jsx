@@ -13,14 +13,13 @@ export function PendingApprovalPage() {
   const { requestId, name, email, step, reset } = useSignupStore();
 
   // Best-effort freshness check — the pending page still renders correctly
-  // from local signup state if this fails, since no admin-approval backend
-  // exists yet to actually change the status.
+  // from local signup state if this fails.
   useEffect(() => {
     if (!requestId) return;
     getSignupStatus({ requestId }).catch(() => {});
   }, [requestId]);
 
-  // Reached directly without completing verification — start over.
+  // Reached directly without submitting a signup request — start over.
   if (!requestId || step !== 'approval') {
     return <Navigate to="/cashier/signup" replace />;
   }
@@ -34,7 +33,6 @@ export function PendingApprovalPage() {
           <CheckCircle2 className="size-7" strokeWidth={1.75} aria-hidden />
         </div>
         <h1 className="font-display text-2xl font-bold text-charcoal-900">Request Submitted Successfully</h1>
-        <p className="mt-1.5 text-sm text-charcoal-500">Your email has been verified.</p>
         <p className="mt-4 max-w-xs text-sm text-charcoal-700">
           Your cashier account is now waiting for administrator approval.
         </p>

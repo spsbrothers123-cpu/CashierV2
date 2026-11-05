@@ -1,6 +1,6 @@
 import { cn } from '@/utils/cn';
 
-/** Icon-in-circle + title + subtitle block reused across signup, OTP, and pending pages. */
+/** Icon-in-circle + title + subtitle block reused across signup and pending pages. */
 export function AuthHeader({ icon: Icon, title, subtitle, tone = 'egg', className }) {
   const toneClasses =
     tone === 'success'

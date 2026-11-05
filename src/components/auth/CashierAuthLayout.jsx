@@ -2,13 +2,13 @@ import { Egg, KeyRound, ShieldCheck, Clock3, UserCheck } from 'lucide-react';
 
 const FEATURES = [
   { icon: KeyRound, text: 'Start with the invitation code your shop admin gave you.' },
-  { icon: ShieldCheck, text: 'Your email is verified before your request goes out.' },
+  { icon: ShieldCheck, text: 'Your invitation code is checked before your request goes out.' },
   { icon: UserCheck, text: 'A shop admin reviews and approves every new cashier.' },
   { icon: Clock3, text: 'Takes about a minute — the rest is on your admin.' },
 ];
 
 /**
- * Shared split-screen shell for the signup / OTP verification / pending
+ * Shared split-screen shell for the signup / pending
  * approval pages. Desktop shows a branded left panel; mobile collapses to
  * a single column. Login intentionally keeps its own simpler layout — see
  * LoginPage.jsx — so this is scoped to the signup flow only.
@@ -40,7 +40,7 @@ export function CashierAuthLayout({ children }) {
             cashier team.
           </h2>
           <p className="mt-3 max-w-xs text-sm text-ivory-50/70">
-            Enter your invite code, set up your account, verify your email, and your admin takes it from there.
+            Enter your invite code, pick your branch, set up your account, and your admin takes it from there.
           </p>
 
           <ul className="mt-8 space-y-4">

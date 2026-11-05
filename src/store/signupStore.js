@@ -2,13 +2,12 @@ import { create } from 'zustand';
 
 /**
  * Carries state across the multi-step signup flow
- * (Invite Code -> Account -> Verify -> Approval) so each step is its own
+ * (Invite Code -> Account -> Approval) so each step is its own
  * route (deep-linkable, back-button friendly) without re-collecting data
  * the cashier already entered.
  *
  * This is in-memory only (cleared on full page reload) — that's intentional:
- * an in-progress signup with a live OTP request shouldn't silently survive a
- * refresh days later. Each page guards against missing state by redirecting
+ * an in-progress signup shouldn't silently survive a refresh days later. Each page guards against missing state by redirecting
  * back to /cashier/signup (see SignupProgress usage in the pages themselves).
  */
 export const useSignupStore = create((set) => ({
@@ -18,7 +17,7 @@ export const useSignupStore = create((set) => ({
   name: '',
   email: '',
   shopId: '',
-  step: 'invite', // 'invite' | 'account' | 'verify' | 'approval'
+  step: 'invite', // 'invite' | 'account' | 'approval'
 
   markInvitationVerified: ({ verificationToken }) =>
     set({ invitationVerified: true, verificationToken, step: 'account' }),
@@ -26,9 +25,7 @@ export const useSignupStore = create((set) => ({
   setShopId: (shopId) => set({ shopId }),
 
   startSignupRequest: ({ requestId, name, email }) =>
-    set({ requestId, name, email, step: 'verify' }),
-
-  markVerified: () => set({ step: 'approval' }),
+    set({ requestId, name, email, step: 'approval' }),
 
   reset: () =>
     set({

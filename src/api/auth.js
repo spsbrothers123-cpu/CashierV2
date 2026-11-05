@@ -26,12 +26,12 @@ export async function logout() {
 }
 
 /**
- * Cashier signup (Invite Code -> Account -> Email OTP verification -> Pending
- * admin approval). This is registration only — normal cashier login (above)
- * stays email/username + password with no OTP step.
+ * Cashier signup (Invite Code -> Account -> Pending admin approval). There is
+ * no email OTP step. This is registration only — normal cashier login (above)
+ * stays email + password.
  *
  * BACKEND ENDPOINT REQUIRED (when USE_STUB_API is false):
- *   POST /auth/signup/verify-invite  { code }                              -> { verificationToken }
+ *   POST /auth/signup/verify-invitation { code }                           -> { verificationToken, expiresInSeconds }
  *   GET  /auth/branches                                                    -> [{ id, name, location, available }]
  *   POST /auth/signup                { name, email, password, shopId,
  *                                      verificationToken }                 -> { requestId, email }
@@ -39,8 +39,6 @@ export async function logout() {
  * Phase 2 Stage 2.4/2.8: the cashier SELECTS an existing branch (shopId from
  * GET /auth/branches). Free-text branch names are never sent — a branch can
  * only be created by the Central Admin.
- *   POST /auth/signup/verify-otp     { requestId, code }                   -> { ok, status }
- *   POST /auth/signup/resend-otp     { requestId }                         -> { ok }
  *   GET  /auth/signup/status         ?requestId=                           -> { status, name, email }
  *
  * verifyInvitationCode() must be called first — its verificationToken proves
@@ -73,18 +71,6 @@ export async function signup({ name, email, password, shopId, verificationToken 
     shopId,
     verificationToken,
   });
-  return data;
-}
-
-export async function verifySignupOtp({ requestId, code }) {
-  if (USE_STUB_API) return stubApi.verifySignupOtp({ requestId, code });
-  const { data } = await apiClient.post('/auth/signup/verify-otp', { requestId, code });
-  return data;
-}
-
-export async function resendSignupOtp({ requestId }) {
-  if (USE_STUB_API) return stubApi.resendSignupOtp({ requestId });
-  const { data } = await apiClient.post('/auth/signup/resend-otp', { requestId });
   return data;
 }
 

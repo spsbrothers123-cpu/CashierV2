@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { UserPlus, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
@@ -28,13 +28,24 @@ export function SignupPage() {
   const [branchesStatus, setBranchesStatus] = useState('loading'); // loading | success | error
 
   // Branches come from the backend (GET /auth/branches) — never typed in.
+  const applyBranches = useCallback((rows) => {
+    setBranches(Array.isArray(rows) ? rows : []);
+    setBranchesStatus('success');
+  }, []);
+
+  // Reloaded after a branch conflict and by the Retry button.
+  const loadBranches = useCallback(() => {
+    setBranchesStatus('loading');
+    return getBranches()
+      .then(applyBranches)
+      .catch(() => setBranchesStatus('error'));
+  }, [applyBranches]);
+
   useEffect(() => {
     let cancelled = false;
     getBranches()
       .then((rows) => {
-        if (cancelled) return;
-        setBranches(rows);
-        setBranchesStatus('success');
+        if (!cancelled) applyBranches(rows);
       })
       .catch(() => {
         if (!cancelled) setBranchesStatus('error');
@@ -42,7 +53,11 @@ export function SignupPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyBranches]);
+
+  const hasNoBranches = branchesStatus === 'success' && branches.length === 0;
+  const allBranchesTaken =
+    branchesStatus === 'success' && branches.length > 0 && branches.every((b) => !b.available);
 
   // A cashier can only reach Account Details after their invitation code has
   // been verified — direct link / refresh / back-button lands here otherwise.
@@ -84,9 +99,22 @@ export function SignupPage() {
         verificationToken,
       });
       startSignupRequest({ requestId, name: fields.name.trim(), email });
-      navigate('/cashier/signup/verify');
+      navigate('/cashier/signup/pending');
     } catch (err) {
-      setFormError(err?.message || 'Unable to create signup request.');
+      if (err?.code === 'BRANCH_HAS_CASHIER' || err?.code === 'BRANCH_NOT_FOUND') {
+        // The branch list was stale: someone took the branch (or it no longer
+        // exists) after this page loaded. Clear the selection and refresh the
+        // list; the other fields the cashier typed are kept.
+        setShopId('');
+        setFormError(
+          err.code === 'BRANCH_HAS_CASHIER'
+            ? 'That branch already has a cashier. Please choose another branch.'
+            : 'That branch is no longer available. Please choose another branch.'
+        );
+        loadBranches();
+      } else {
+        setFormError(err?.message || 'Unable to create signup request.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -149,8 +177,19 @@ export function SignupPage() {
             {fieldErrors.shopId ? (
               <p className="mt-1.5 text-sm text-danger-600">{fieldErrors.shopId}</p>
             ) : branchesStatus === 'error' ? (
+              <div className="mt-1.5 flex items-center gap-3 text-sm text-danger-600">
+                <span>Couldn't load branches. Check your connection and try again.</span>
+                <Button type="button" variant="outline" size="sm" onClick={loadBranches}>
+                  Retry
+                </Button>
+              </div>
+            ) : hasNoBranches ? (
               <p className="mt-1.5 text-sm text-danger-600">
-                Couldn't load branches. Check your connection and reload this page.
+                No branches have been set up yet. Please ask your administrator to create your branch.
+              </p>
+            ) : allBranchesTaken ? (
+              <p className="mt-1.5 text-sm text-danger-600">
+                Every branch already has a cashier. Please ask your administrator.
               </p>
             ) : (
               <p className="mt-1.5 text-xs text-charcoal-400">
@@ -187,7 +226,7 @@ export function SignupPage() {
         )}
 
         <Button type="submit" loading={submitting} className="mt-6 w-full" size="lg">
-          {submitting ? 'Sending Verification Code...' : 'Create Account'}
+          {submitting ? 'Submitting Request...' : 'Create Account'}
         </Button>
       </form>
 
