@@ -8,10 +8,12 @@ import {
   Clock,
   Settings,
   UserRound,
+  Bell,
   LogOut,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
+import { useNotificationStore } from '@/store/notificationStore';
 import { cn } from '@/utils/cn';
 
 const NAV_ITEMS = [
@@ -20,11 +22,13 @@ const NAV_ITEMS = [
   { to: '/cashier/reports', label: 'Reports', icon: BarChart3 },
   { to: '/cashier/history', label: 'History', icon: History },
   { to: '/cashier/sessions', label: 'Sessions', icon: Clock },
+  { to: '/cashier/notifications', label: 'Notifications', icon: Bell },
   { to: '/cashier/settings', label: 'Settings', icon: Settings },
   { to: '/cashier/profile', label: 'Profile', icon: UserRound },
 ];
 
 export function Sidebar({ collapsed, onToggleCollapsed, cashier, onLogout }) {
+  const unread = useNotificationStore((st) => st.unreadCount) ?? 0;
   return (
     <aside
       className={cn(
@@ -60,6 +64,11 @@ export function Sidebar({ collapsed, onToggleCollapsed, cashier, onLogout }) {
           >
             <Icon className="size-[18px] shrink-0" aria-hidden />
             {!collapsed && <span className="truncate">{label}</span>}
+            {to === '/cashier/notifications' && unread > 0 && (
+              <span className="ml-auto rounded-full bg-danger-600 px-1.5 text-[10px] font-bold text-white" aria-label={`${unread} unread`}>
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

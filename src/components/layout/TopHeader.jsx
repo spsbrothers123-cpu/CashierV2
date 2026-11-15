@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Menu, User } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/utils/cn';
 
 export function TopHeader({ shop, session, cashier, onOpenDrawer }) {
@@ -57,6 +58,8 @@ export function TopHeader({ shop, session, cashier, onOpenDrawer }) {
       <div className="hidden text-right text-xs text-charcoal-300 sm:block">
         <p className="font-medium text-charcoal-700">{cashier?.name}</p>
       </div>
+
+      {cashier && <NotificationBell cashier={cashier} />}
 
       <div className="flex size-9 items-center justify-center rounded-full bg-charcoal-900/6 text-charcoal-700">
         <User className="size-4" aria-hidden />

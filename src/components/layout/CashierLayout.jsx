@@ -8,6 +8,7 @@ import {
   Clock,
   Settings,
   UserRound,
+  Bell,
   LogOut,
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
@@ -16,6 +17,7 @@ import { MobileBottomNav } from './MobileBottomNav';
 import { Drawer } from '@/components/ui/Drawer';
 import { useAuthStore } from '@/store/authStore';
 import { useSessionStore, sessionBelongsTo } from '@/store/sessionStore';
+import { useNotificationStore } from '@/store/notificationStore';
 import { cn } from '@/utils/cn';
 
 const DRAWER_ITEMS = [
@@ -24,6 +26,7 @@ const DRAWER_ITEMS = [
   { to: '/cashier/reports', label: 'Reports', icon: BarChart3 },
   { to: '/cashier/history', label: 'History', icon: History },
   { to: '/cashier/sessions', label: 'Sessions', icon: Clock },
+  { to: '/cashier/notifications', label: 'Notifications', icon: Bell },
   { to: '/cashier/settings', label: 'Settings', icon: Settings },
   { to: '/cashier/profile', label: 'Profile', icon: UserRound },
 ];
@@ -33,6 +36,7 @@ export function CashierLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const cashier = useAuthStore((s) => s.cashier);
   const logout = useAuthStore((s) => s.logout);
+  const unread = useNotificationStore((s) => s.unreadCount) ?? 0;
   const storedSession = useSessionStore((s) => s.session);
   const session = sessionBelongsTo(storedSession, cashier?.id) ? storedSession : null;
 
@@ -74,6 +78,11 @@ export function CashierLayout() {
             >
               <Icon className="size-[18px]" aria-hidden />
               {label}
+              {to === '/cashier/notifications' && unread > 0 && (
+                <span className="ml-auto rounded-full bg-danger-600 px-1.5 text-[10px] font-bold text-white" aria-label={`${unread} unread`}>
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
             </NavLink>
           ))}
           <button
