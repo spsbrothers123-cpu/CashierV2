@@ -3,6 +3,7 @@ import { login as apiLogin, fetchCurrentCashier, logout as apiLogout } from '@/a
 import { getToken, setToken, registerUnauthorizedHandler } from '@/api/client';
 import { useCartStore } from '@/store/cartStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { useNotificationStore } from '@/store/notificationStore';
 
 /**
  * Everything held in memory on behalf of ONE signed-in cashier. It must never
@@ -14,6 +15,7 @@ import { useSessionStore } from '@/store/sessionStore';
 function resetPerCashierState() {
   useCartStore.getState().clearCart();
   useSessionStore.getState().clear();
+  useNotificationStore.getState().clear();
 }
 
 export const useAuthStore = create((set) => ({

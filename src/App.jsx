@@ -11,6 +11,7 @@ import { ReportsPage } from '@/pages/cashier/ReportsPage';
 import { HistoryPage } from '@/pages/cashier/HistoryPage';
 import { SettingsPage } from '@/pages/cashier/SettingsPage';
 import { ProfilePage } from '@/pages/cashier/ProfilePage';
+import { NotificationsPage } from '@/pages/cashier/NotificationsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { CashierLayout } from '@/components/layout/CashierLayout';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/cashier/sessions" element={<SessionsPage />} />
           <Route path="/cashier/settings" element={<SettingsPage />} />
           <Route path="/cashier/profile" element={<ProfilePage />} />
+          <Route path="/cashier/notifications" element={<NotificationsPage />} />
 
           <Route element={<SessionGate />}>
             <Route path="/cashier/billing" element={<BillingPage />} />
